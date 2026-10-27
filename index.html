@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BREAK THE INTERNET — Infrastructure Failure Simulator</title>
+<meta name="description" content="A local, educational simulator. Break simulated infrastructure, watch requests fail, and discover what keeps the internet running. No real servers are touched.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#simulator">Skip to simulator</a>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 44 44" width="38" height="38" role="img" aria-label="Break the Internet logo">
+        <rect x="2" y="2" width="40" height="40" rx="9" fill="#101114" stroke="#30333B"/>
+        <path d="M10 28 L20 12 L26 22 L32 14" fill="none" stroke="#C8F169" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M22 30 L32 30 L14 30" fill="none" stroke="#5ED3E8" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="32" cy="14" r="3" fill="#FF5A5A"/>
+      </svg>
+    </span>
+    <span class="brand-text">
+      <strong>BREAK THE INTERNET</strong>
+      <small>INFRASTRUCTURE LAB</small>
+    </span>
+  </div>
+
+  <div class="top-actions">
+    <span class="sys-status" id="sysStatus" role="status"><span class="dot ok" id="sysDot"></span><span id="sysStatusText">All systems operational</span></span>
+    <button class="btn btn-ghost" id="btnStartPause" type="button" aria-label="Start or pause simulation">Pause</button>
+    <button class="btn btn-ghost" id="btnResetTop" type="button">Reset</button>
+  </div>
+</header>
+
+<div class="ticker" role="status" aria-live="polite"><span class="ticker-label">LIVE FEED</span><span id="tickerText">Simulation started — all components healthy.</span></div>
+
+<main>
+  <!-- ============ LANDING ============ -->
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="pulse-dot"></span> LOCAL SIMULATION &middot; NO REAL SERVERS TOUCHED</p>
+      <h1 id="heroTitle">Everything works.<br>Until it <span class="hl">doesn&rsquo;t.</span></h1>
+      <p class="hero-sub">Break simulated infrastructure. Watch requests fail. Discover what keeps the internet running.</p>
+      <div class="hero-cta">
+        <button class="btn btn-primary" id="btnLaunch" type="button">Launch Simulation &rarr;</button>
+        <button class="btn btn-secondary" id="btnHeroPause" type="button">Pause simulation</button>
+      </div>
+      <p class="hero-note">Try it first: <button class="text-btn" type="button" data-quick="dns">Disable DNS</button> &middot; <button class="text-btn" type="button" data-quick="db">Disconnect the database</button> &middot; <button class="text-btn" type="button" data-quick="primary-backup">Fail over to backup</button></p>
+    </div>
+
+    <div class="hero-preview" aria-label="Live preview of the infrastructure diagram">
+      <div class="preview-head"><span>PREVIEW &middot; REQUEST FLOW</span><span class="live"><span class="dot ok"></span> LIVE</span></div>
+      <svg viewBox="0 0 520 210" class="preview-svg" role="img" aria-label="Preview: browser to DNS to server to database">
+        <path d="M70 105 H165" stroke="#30333B" stroke-width="2" fill="none"/>
+        <path d="M215 105 H310" stroke="#30333B" stroke-width="2" fill="none"/>
+        <path d="M360 105 H455" stroke="#30333B" stroke-width="2" fill="none"/>
+        <g class="pv-node"><rect x="20" y="75" width="90" height="60" rx="10"/><text x="65" y="100" text-anchor="middle">BROWSER</text><text x="65" y="118" text-anchor="middle" class="pv-sub">CLIENT</text></g>
+        <g class="pv-node"><rect x="165" y="75" width="90" height="60" rx="10"/><text x="210" y="100" text-anchor="middle">DNS</text><text x="210" y="118" text-anchor="middle" class="pv-sub">RESOLVER</text></g>
+        <g class="pv-node"><rect x="310" y="75" width="90" height="60" rx="10"/><text x="355" y="100" text-anchor="middle">SERVER</text><text x="355" y="118" text-anchor="middle" class="pv-sub">PRIMARY</text></g>
+        <g class="pv-node"><rect x="455" y="75" width="90" height="60" rx="10"/><text x="500" y="100" text-anchor="middle">DATABASE</text><text x="500" y="118" text-anchor="middle" class="pv-sub">POSTGRES</text></g>
+        <circle r="5" fill="#5ED3E8"><animateMotion dur="3.2s" repeatCount="indefinite" path="M70 105 H455"/></circle>
+        <circle r="4" fill="#C8F169"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite" path="M455 105 H70"/></circle>
+      </svg>
+      <p class="preview-caption">Packets travel browser &rarr; DNS &rarr; server &rarr; database &mdash; until something breaks.</p>
+    </div>
+  </section>
+
+  <!-- ============ WORKSPACE ============ -->
+  <section class="workspace" id="simulator" aria-labelledby="workspaceTitle">
+    <div class="workspace-head">
+      <div>
+        <h2 id="workspaceTitle">Simulation workspace</h2>
+        <p>Every number below comes from the simulation engine &mdash; not random decoration. Simulated, not real, infrastructure.</p>
+      </div>
+      <div class="sim-state" role="status">
+        <span id="runIndicator" class="run-indicator running">● RUNNING</span>
+        <span class="sim-clock">SIM TIME <strong id="simClock">T+00:00</strong></span>
+        <button class="btn btn-primary btn-sm" id="btnDemo" type="button">Play Demo</button>
+      </div>
+    </div>
+
+    <!-- Quick scenario selector -->
+    <nav class="scenarios" aria-label="Quick scenario selector">
+      <button class="chip active" type="button" data-scenario="normal">Normal Operation</button>
+      <button class="chip" type="button" data-scenario="dns">DNS Failure</button>
+      <button class="chip" type="button" data-scenario="db">Database Failure</button>
+      <button class="chip" type="button" data-scenario="overload">Server Overload</button>
+      <button class="chip" type="button" data-scenario="primary">Primary Server Failure</button>
+      <button class="chip" type="button" data-scenario="primary-backup">Primary Failure with Backup</button>
+    </nav>
+
+    <!-- Traffic lab -->
+    <section class="traffic-panel" aria-label="Traffic controls">
+      <div class="traffic-field">
+        <label for="rateSlider">Request rate <span id="rateLabel">every 1,600 ms</span></label>
+        <input id="rateSlider" type="range" min="600" max="3000" step="200" value="1600">
+      </div>
+      <div class="traffic-field">
+        <label for="mixSelect">Traffic mix</label>
+        <select id="mixSelect">
+          <option value="balanced" selected>Balanced</option>
+          <option value="db-heavy">Database-heavy</option>
+          <option value="cache-heavy">Cache-heavy</option>
+          <option value="static-heavy">Static-heavy</option>
+        </select>
+      </div>
+      <div class="traffic-field">
+        <label for="queueSlider">Queue limit <span id="queueLimitLabel">12</span></label>
+        <input id="queueSlider" type="range" min="6" max="20" step="1" value="12">
+      </div>
+      <div class="traffic-field traffic-export">
+        <button class="btn btn-primary" id="btnExport" type="button">Export session report</button>
+        <span class="traffic-note">Downloads a text summary of this session.</span>
+      </div>
+    </section>
+
+    <!-- Metrics -->
+    <section class="metrics" aria-label="Live metrics">
+      <div class="metric"><span class="m-label">Total Requests</span><strong class="m-value" id="mTotal">0</strong><span class="m-hint">completed + in flight</span></div>
+      <div class="metric"><span class="m-label">Successful</span><strong class="m-value ok-text" id="mSuccess">0</strong><span class="m-hint">returned a response</span></div>
+      <div class="metric"><span class="m-label">Failed</span><strong class="m-value bad-text" id="mFailed">0</strong><span class="m-hint">error or timeout</span></div>
+      <div class="metric"><span class="m-label">Success Rate</span><strong class="m-value" id="mRate">—</strong><span class="m-hint">success ÷ completed</span></div>
+      <div class="metric"><span class="m-label">Avg. Latency</span><strong class="m-value" id="mLatency">—</strong><span class="m-hint">mean of completed reqs</span></div>
+      <div class="metric"><span class="m-label">Queue Depth</span><strong class="m-value warn-text" id="mQueue">0</strong><span class="m-hint" id="mQueueHint">limit 12 &middot; warn at 8</span></div>
+      <div class="metric"><span class="m-label">Active Failures</span><strong class="m-value bad-text" id="mActiveFailures">0</strong><span class="m-hint" id="mActiveHint">none</span></div>
+      <div class="metric"><span class="m-label">Cache Hit Rate</span><strong class="m-value" id="mCacheRate">—</strong><span class="m-hint" id="mCacheHint">0 hits · 0 misses</span></div>
+      <div class="metric metric-wide">
+        <span class="m-label">Success rate history <small>(last 24 completed requests)</small></span>
+        <svg id="spark" viewBox="0 0 240 44" preserveAspectRatio="none" aria-hidden="true"><polyline id="sparkLine" points="0,40 240,40" fill="none" stroke="#C8F169" stroke-width="2"/></svg>
+      </div>
+    </section>
+
+    <div class="grid-main">
+      <!-- Diagram -->
+      <section class="diagram-panel" aria-labelledby="diagramTitle">
+        <div class="panel-head">
+          <div><h3 id="diagramTitle">Infrastructure map</h3><p>Select a component to learn what it does. Cyan = request, lime = response, red = failed leg.</p></div>
+          <span class="legend"><i class="leg req"></i> Request <i class="leg res"></i> Response <i class="leg fail"></i> Failed</span>
+        </div>
+
+        <div class="diagram-scroll">
+        <div class="demo-banner" id="demoBanner" hidden><span id="demoStep">Demo</span><button class="btn btn-ghost btn-sm" id="btnDemoStop" type="button">Stop demo</button></div>
+        <svg id="diagram" viewBox="0 0 920 640" role="img" aria-label="Infrastructure diagram: browser, DNS, primary server, backup server, database and cache, attacker and fake server">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4A4E58"/></marker>
+            <marker id="arrowActive" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#5ED3E8"/></marker>
+          </defs>
+
+          <!-- Paths (ids used by JS packet animation) -->
+          <path id="path-browser-dns" class="link" d="M190 270 H285" marker-end="url(#arrow)"/>
+          <path id="path-dns-primary" class="link" d="M395 250 C 430 250, 450 190, 485 180" marker-end="url(#arrow)"/>
+          <path id="path-dns-backup" class="link backup-link" d="M395 290 C 430 290, 450 360, 485 370" marker-end="url(#arrow)"/>
+          <path id="path-primary-db" class="link" d="M620 180 H695" marker-end="url(#arrow)"/>
+          <path id="path-primary-cache" class="link" d="M620 200 C 660 200, 680 300, 695 350" marker-end="url(#arrow)"/>
+          <path id="path-backup-cache" class="link" d="M620 370 H695" marker-end="url(#arrow)"/>
+          <path id="path-backup-db" class="link" d="M620 350 C 660 350, 680 250, 695 200" marker-end="url(#arrow)"/>
+          <path id="path-attacker-dns" class="link attack-link" d="M170 480 V435 H370 V325" marker-end="url(#arrow)"/>
+          <path id="path-attacker-primary" class="link attack-link" d="M115 480 V60 H570 V125" marker-end="url(#arrow)"/>
+          <path id="path-dns-fake" class="link spoof-link" d="M370 325 V480" marker-end="url(#arrow)"/>
+          <g id="packetLayer"></g>
+
+          <!-- Nodes: generated groups, positioned in SVG -->
+          <g class="node" id="node-browser" data-node="browser" tabindex="0" role="button" aria-label="Browser Client, healthy">
+            <rect x="40" y="215" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(58,232)"><rect x="0" y="0" width="34" height="24" rx="4" fill="none" stroke="#F2F1EC" stroke-width="2"/><line x1="0" y1="6" x2="34" y2="6" stroke="#F2F1EC" stroke-width="2"/><circle cx="5" cy="3" r="1.4" fill="#FF5A5A"/><circle cx="11" cy="3" r="1.4" fill="#F5B942"/><circle cx="17" cy="3" r="1.4" fill="#C8F169"/></g>
+            <text x="115" y="285" text-anchor="middle" class="node-name">Browser Client</text>
+            <text x="115" y="302" text-anchor="middle" class="node-id">CLIENT · WEB-01</text>
+            <text x="115" y="240" text-anchor="middle" class="node-status" data-status-for="browser">● HEALTHY</text>
+          </g>
+
+          <g class="node" id="node-dns" data-node="dns" tabindex="0" role="button" aria-label="DNS Resolver, healthy">
+            <rect x="295" y="215" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(313,232)"><circle cx="17" cy="12" r="14" fill="none" stroke="#F2F1EC" stroke-width="2"/><ellipse cx="17" cy="12" rx="14" ry="6" fill="none" stroke="#F2F1EC" stroke-width="1.5"/><line x1="17" y1="0" x2="17" y2="24" stroke="#F2F1EC" stroke-width="1.5"/></g>
+            <text x="370" y="285" text-anchor="middle" class="node-name">DNS Resolver</text>
+            <text x="370" y="302" text-anchor="middle" class="node-id">DNS · 8.8.8.8*</text>
+            <text x="370" y="240" text-anchor="middle" class="node-status" data-status-for="dns">● HEALTHY</text>
+          </g>
+
+          <g class="node" id="node-primary" data-node="primary" tabindex="0" role="button" aria-label="Primary Web Server, healthy">
+            <rect x="495" y="125" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(513,142)"><rect x="0" y="0" width="34" height="9" rx="2" fill="none" stroke="#F2F1EC" stroke-width="2"/><rect x="0" y="13" width="34" height="9" rx="2" fill="none" stroke="#F2F1EC" stroke-width="2"/><circle cx="29" cy="4.5" r="1.6" fill="#C8F169"/><circle cx="29" cy="17.5" r="1.6" fill="#C8F169"/></g>
+            <text x="570" y="195" text-anchor="middle" class="node-name">Primary Server</text>
+            <text x="570" y="212" text-anchor="middle" class="node-id">WEB · APP-01</text>
+            <text x="570" y="150" text-anchor="middle" class="node-status" data-status-for="primary">● HEALTHY</text>
+            <g class="queue-badge" id="queueBadge"><rect x="615" y="125" width="52" height="20" rx="10"/><text x="641" y="139" text-anchor="middle">Q 0</text></g>
+          </g>
+
+          <g class="node" id="node-backup" data-node="backup" tabindex="0" role="button" aria-label="Backup Server, standby">
+            <rect x="495" y="315" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(513,332)"><rect x="0" y="0" width="34" height="9" rx="2" fill="none" stroke="#F2F1EC" stroke-width="2"/><rect x="0" y="13" width="34" height="9" rx="2" fill="none" stroke="#F2F1EC" stroke-width="2" stroke-dasharray="3 3"/></g>
+            <text x="570" y="385" text-anchor="middle" class="node-name">Backup Server</text>
+            <text x="570" y="402" text-anchor="middle" class="node-id">WEB · APP-02</text>
+            <text x="570" y="340" text-anchor="middle" class="node-status" data-status-for="backup">○ STANDBY</text>
+          </g>
+
+          <g class="node" id="node-database" data-node="database" tabindex="0" role="button" aria-label="Database, healthy">
+            <rect x="705" y="125" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(723,142)"><ellipse cx="17" cy="4" rx="17" ry="4" fill="none" stroke="#F2F1EC" stroke-width="2"/><path d="M0 4 V18 C0 20 7 22 17 22 C27 22 34 20 34 18 V4" fill="none" stroke="#F2F1EC" stroke-width="2"/><path d="M0 11 C0 13 7 15 17 15 C27 15 34 13 34 11" fill="none" stroke="#F2F1EC" stroke-width="1.5"/></g>
+            <text x="780" y="195" text-anchor="middle" class="node-name">Database</text>
+            <text x="780" y="212" text-anchor="middle" class="node-id">DB · PG-01</text>
+            <text x="780" y="150" text-anchor="middle" class="node-status" data-status-for="database">● HEALTHY</text>
+          </g>
+
+          <g class="node" id="node-cache" data-node="cache" tabindex="0" role="button" aria-label="Cache, healthy">
+            <rect x="705" y="315" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(723,332)"><path d="M17 0 L34 9 V18 L17 27 L0 18 V9 Z" fill="none" stroke="#F2F1EC" stroke-width="2"/><path d="M17 9 L34 0 M17 9 L0 0 M17 9 V27" fill="none" stroke="#F2F1EC" stroke-width="1.5" opacity="0.6"/></g>
+            <text x="780" y="385" text-anchor="middle" class="node-name">Cache</text>
+            <text x="780" y="402" text-anchor="middle" class="node-id">CACHE · REDIS-01</text>
+            <text x="780" y="340" text-anchor="middle" class="node-status" data-status-for="cache">● HEALTHY</text>
+          </g>
+
+          <g class="node" id="node-attacker" data-node="attacker" tabindex="0" role="button" aria-label="Attacker, idle">
+            <rect x="40" y="480" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(98,497)"><circle cx="17" cy="12" r="13" fill="none" stroke="#FF8A8A" stroke-width="2"/><circle cx="17" cy="12" r="5" fill="none" stroke="#FF8A8A" stroke-width="2"/><line x1="17" y1="0" x2="17" y2="4" stroke="#FF8A8A" stroke-width="2"/><line x1="17" y1="20" x2="17" y2="24" stroke="#FF8A8A" stroke-width="2"/></g>
+            <text x="115" y="550" text-anchor="middle" class="node-name">Attacker</text>
+            <text x="115" y="567" text-anchor="middle" class="node-id">BOTNET · SIMULATED</text>
+            <text x="115" y="505" text-anchor="middle" class="node-status" data-status-for="attacker">○ IDLE</text>
+          </g>
+
+          <g class="node" id="node-fake" data-node="fake" tabindex="0" role="button" aria-label="Fake server, dormant">
+            <rect x="295" y="480" width="150" height="110" rx="12"/>
+            <g class="icon" transform="translate(353,497)"><path d="M17 0 L34 24 H0 Z" fill="none" stroke="#F5B942" stroke-width="2"/><line x1="17" y1="8" x2="17" y2="16" stroke="#F5B942" stroke-width="2"/><circle cx="17" cy="20" r="1.6" fill="#F5B942"/></g>
+            <text x="370" y="550" text-anchor="middle" class="node-name">Fake Server</text>
+            <text x="370" y="567" text-anchor="middle" class="node-id">SPOOF · NOT REAL</text>
+            <text x="370" y="505" text-anchor="middle" class="node-status" data-status-for="fake">○ DORMANT</text>
+          </g>
+        </svg>
+        </div>
+        <p class="diagram-foot">* Simulated resolver address, not a real lookup. Queue badge on the primary server shows requests waiting under overload. Click any node for its explainer.</p>
+
+        <div class="queue-meter" aria-label="Server queue">
+          <span>SERVER QUEUE</span>
+          <div class="meter"><div id="queueBar" style="width:0%"></div></div>
+          <span id="queueText">0 / 12</span>
+          <span id="queueWarning" class="queue-warn" hidden>Queue approaching its limit — timeouts will follow.</span>
+        </div>
+        <div class="inspector" aria-label="Last request inspector">
+          <span class="inspector-label">LAST REQUEST</span>
+          <span id="inspectorText">No completed request yet.</span>
+        </div>
+      </section>
+
+      <!-- Failure controls -->
+      <aside class="controls" aria-labelledby="controlsTitle">
+        <div class="panel-head"><div><h3 id="controlsTitle">Failure controls</h3><p>Each button changes the real simulation state.</p></div></div>
+
+        <article class="control" data-control="dns">
+          <div class="control-head"><h4>DNS Failure</h4><span class="state-pill" id="pill-dns">OFF</span></div>
+          <p>New requests cannot resolve the server address.</p>
+          <button class="btn btn-danger-outline" type="button" data-action="toggle-dns">Disable DNS</button>
+        </article>
+
+        <article class="control" data-control="db">
+          <div class="control-head"><h4>Database Failure</h4><span class="state-pill" id="pill-db">OFF</span></div>
+          <p>Database-dependent requests fail. Cached and static content can survive.</p>
+          <button class="btn btn-danger-outline" type="button" data-action="toggle-db">Disconnect Database</button>
+        </article>
+
+        <article class="control" data-control="overload">
+          <div class="control-head"><h4>Server Overload</h4><span class="state-pill" id="pill-overload">OFF</span></div>
+          <p>Traffic arrives faster than the server can process it. The queue grows, latency rises, then timeouts start.</p>
+          <button class="btn btn-warning-outline" type="button" data-action="toggle-overload">Simulate Server Overload</button>
+        </article>
+
+        <article class="control" data-control="primary">
+          <div class="control-head"><h4>Primary Server Failure</h4><span class="state-pill" id="pill-primary">OFF</span></div>
+          <p>The primary server goes down. Without a backup, its traffic fails.</p>
+          <button class="btn btn-danger-outline" type="button" data-action="toggle-primary">Fail Primary Server</button>
+        </article>
+
+        <article class="control" data-control="backup">
+          <div class="control-head"><h4>Backup Server</h4><span class="state-pill" id="pill-backup">STANDBY</span></div>
+          <p>When enabled and the primary fails, eligible traffic reroutes to the backup. It cannot bypass a DNS failure.</p>
+          <button class="btn btn-primary-outline" type="button" data-action="toggle-backup">Enable Backup Server</button>
+        </article>
+
+        <article class="control" data-control="cache">
+          <div class="control-head"><h4>Cache Behaviour</h4><span class="state-pill on" id="pill-cache">ON</span></div>
+          <p>When on, eligible cached responses are served without a fresh database query.</p>
+          <button class="btn btn-primary-outline" type="button" data-action="toggle-cache">Disable Cache</button>
+        </article>
+
+        <div class="attack-lab">
+          <div class="panel-head"><div><h3>Attack Lab</h3><p>Simulated attacks only. No real targets, no real traffic.</p></div></div>
+          <p class="attack-stats" id="attackStats">Attacks blocked: 0 · Attacks that hit: 0</p>
+
+          <article class="control attack">
+            <div class="control-head"><h4>DDoS Flood</h4><span class="state-pill" id="pill-ddos">OFF</span></div>
+            <p>A simulated botnet floods the primary server. Legitimate requests queue and time out unless rate limiting drops the flood.</p>
+            <button class="btn btn-danger-outline" type="button" data-action="toggle-ddos">Launch DDoS</button>
+            <button class="btn btn-ghost mitigation" type="button" data-action="toggle-ratelimit" aria-pressed="false">Rate limiting: OFF</button>
+          </article>
+
+          <article class="control attack">
+            <div class="control-head"><h4>DNS Spoofing</h4><span class="state-pill" id="pill-spoof">OFF</span></div>
+            <p>Fake DNS answers divert requests to the fake server. DNSSEC validation rejects the fake answers.</p>
+            <button class="btn btn-danger-outline" type="button" data-action="toggle-spoof">Launch DNS Spoofing</button>
+            <button class="btn btn-ghost mitigation" type="button" data-action="toggle-dnssec" aria-pressed="false">DNSSEC validation: OFF</button>
+          </article>
+
+          <article class="control attack">
+            <div class="control-head"><h4>SQL Injection Attempt</h4><span class="state-pill" id="pill-sqli">OFF</span></div>
+            <p>Malicious database requests probe the database. A WAF blocks them; without it, the database degrades until the attack stops and it is restored.</p>
+            <button class="btn btn-danger-outline" type="button" data-action="toggle-sqli">Launch SQL Injection</button>
+            <button class="btn btn-ghost mitigation" type="button" data-action="toggle-waf" aria-pressed="false">WAF: OFF</button>
+          </article>
+        </div>
+
+        <div class="control-actions">
+          <button class="btn btn-ghost" id="btnPause2" type="button">Pause</button>
+          <button class="btn btn-ghost" id="btnReset2" type="button">Reset simulation</button>
+        </div>
+        <p class="controls-note">Simulation only. Nothing here contacts a real server, DNS service, or website.</p>
+      </aside>
+    </div>
+
+    <section class="uptime-panel" aria-label="Component uptime">
+      <h3>Component uptime <span>since simulation start · updated every second</span></h3>
+      <div class="uptime-grid">
+        <div class="uptime-row"><span>Browser</span><div class="uptime-bar"><div id="up-browser-bar"></div></div><strong id="up-browser">—</strong></div>
+        <div class="uptime-row"><span>DNS</span><div class="uptime-bar"><div id="up-dns-bar"></div></div><strong id="up-dns">—</strong></div>
+        <div class="uptime-row"><span>Primary</span><div class="uptime-bar"><div id="up-primary-bar"></div></div><strong id="up-primary">—</strong></div>
+        <div class="uptime-row"><span>Backup</span><div class="uptime-bar"><div id="up-backup-bar"></div></div><strong id="up-backup">—</strong></div>
+        <div class="uptime-row"><span>Database</span><div class="uptime-bar"><div id="up-database-bar"></div></div><strong id="up-database">—</strong></div>
+        <div class="uptime-row"><span>Cache</span><div class="uptime-bar"><div id="up-cache-bar"></div></div><strong id="up-cache">—</strong></div>
+      </div>
+      <p class="uptime-note">Uptime counts seconds a component was healthy while the simulation was running. Overload counts as degraded for the primary; a disabled cache counts as down. The backup has no failure mode in this model, so it stays at 100%.</p>
+    </section>
+
+    <!-- Real-world architecture labs (v3) -->
+    <section class="labs" aria-label="Real-world architecture labs">
+      <div class="lab-panel">
+        <h3>Architecture Modes</h3>
+        <p class="lab-note">Same engine, different real-world system. Simplified educational models based on publicly known patterns — not Meta's actual internal code.</p>
+        <div class="arch-chips" role="group" aria-label="Architecture mode">
+          <button class="chip arch-chip active" type="button" data-arch-mode="generic">Generic Website</button>
+          <button class="chip arch-chip" type="button" data-arch-mode="instagram">Instagram Mode</button>
+          <button class="chip arch-chip" type="button" data-arch-mode="whatsapp">WhatsApp Mode</button>
+        </div>
+        <p class="mode-banner" id="modeBanner">Mode: Generic Website — App → DNS → Server → Database / Cache.</p>
+        <div id="instagramControls" hidden>
+          <p class="lab-note"><strong>Instagram flow:</strong> App → CDN Edge → Feed Service → Feed Cache / Sharded DB / Media Storage.</p>
+          <button class="btn btn-danger-outline lab-btn" type="button" data-arch-toggle="cdn">Fail CDN Edge</button>
+          <button class="btn btn-danger-outline lab-btn" type="button" data-arch-toggle="media">Fail Media Storage</button>
+          <button class="btn btn-danger-outline lab-btn" type="button" data-arch-toggle="feed">Fail Feed Service</button>
+          <p class="lab-note">CDN down = photos/reels blank, text still loads. Media down = uploads fail, cached posts still viewable. Feed down = feed empty, profile still loads.</p>
+        </div>
+        <div id="whatsappControls" hidden>
+          <p class="lab-note"><strong>WhatsApp flow:</strong> Sender → Connection Gateway → Message Queue → Chat Server → Message Store → Receiver + Push. Server routes encrypted blobs only — it cannot read messages.</p>
+          <button class="btn btn-danger-outline lab-btn" type="button" data-arch-toggle="gateway">Fail Connection Gateway</button>
+          <button class="btn btn-warning-outline lab-btn" type="button" data-arch-toggle="queuebacklog">Create Queue Backlog</button>
+          <button class="btn btn-warning-outline lab-btn" type="button" data-arch-toggle="push">Fail Push Service</button>
+          <button class="btn btn-danger-outline lab-btn" type="button" data-arch-toggle="store">Fail Message Store</button>
+          <p class="lab-note">Gateway down = stuck at one tick. Queue backlog = messages delayed, not lost. Push down = delivered (double tick) but no buzz. Store down = live chat works, history won't load.</p>
+        </div>
+        <p class="lab-note" id="archPills">Instagram: <span id="pill-cdn">CDN OK</span> · <span id="pill-media">Media OK</span> · <span id="pill-feed">Feed OK</span> &nbsp;|&nbsp; WhatsApp: <span id="pill-gateway">Gateway OK</span> · <span id="pill-queuebacklog">Queue OK</span> · <span id="pill-push">Push OK</span> · <span id="pill-store">Store OK</span></p>
+      </div>
+
+      <div class="lab-panel">
+        <h3>Real Outage Replay</h3>
+        <p class="lab-note">Replay a famous outage step by step, as a simplified story — not a claim about exact internal events.</p>
+        <div class="demo-banner" id="replayBanner" hidden><span id="replayStep">Replay</span><button class="btn btn-ghost btn-sm" id="btnReplayStop" type="button">Stop replay</button></div>
+        <button class="btn btn-warning-outline lab-btn" type="button" id="btnReplayMeta">Replay 2021 Meta Outage</button>
+        <button class="btn btn-warning-outline lab-btn" type="button" id="btnReplayCdn">Replay Instagram CDN Outage</button>
+      </div>
+
+      <div class="lab-panel">
+        <h3>Fix-it Challenge</h3>
+        <p class="lab-note">A hidden break is injected. Diagnose it from the diagram, logs, and metrics, then fix it with the correct control. No answer is logged — you have to find it.</p>
+        <p class="challenge-line"><span id="challengeStatus">No challenge running.</span></p>
+        <p class="challenge-line">Time: <strong id="challengeTimer">0s</strong> · Score: <strong id="challengeScore">—</strong></p>
+        <button class="btn btn-primary lab-btn" type="button" id="btnChallenge">Start Challenge</button>
+      </div>
+
+      <div class="lab-panel">
+        <h3>Scale Lab</h3>
+        <p class="lab-note">Drag from 10 users to 10 million. Watch servers and database shards grow. With auto-scale ON, the queue drains faster; with it OFF, high traffic chokes like overload.</p>
+        <label for="scaleSlider">Simulated users: <strong id="scaleUsersLabel">1,000</strong></label>
+        <input id="scaleSlider" type="range" min="0" max="6" step="1" value="2">
+        <p class="challenge-line">Servers (auto-scaled): <strong id="scaleServersText">1</strong> · DB shards: <strong id="scaleShardsText">1</strong></p>
+        <button class="btn btn-primary-outline lab-btn" type="button" id="btnAutoscale" aria-pressed="true">Auto-scale: ON</button>
+      </div>
+
+      <div class="lab-panel">
+        <h3>Multi-Region + Cost</h3>
+        <p class="lab-note">Fail Region A, then enable Region B. Redundancy saves availability but costs money — that trade-off is the real engineering lesson.</p>
+        <p class="challenge-line">Simulated cost: <strong id="regionCost">$100 / month</strong> · Availability: <strong id="regionAvailability">99.90%</strong></p>
+        <button class="btn btn-danger-outline lab-btn" type="button" id="btnRegionFail">Fail Region A</button>
+        <button class="btn btn-primary-outline lab-btn" type="button" id="btnRegionB">Enable Region B</button>
+        <p class="lab-note" id="regionStatus">Region A: healthy · Region B: standby.</p>
+      </div>
+
+      <div class="lab-panel">
+        <h3>Share a Broken Scenario</h3>
+        <p class="lab-note">Copy a link that reopens this page in the same broken state — perfect for a teacher sending a student a fault to fix. No login, no backend; the state lives in the link itself.</p>
+        <button class="btn btn-primary lab-btn" type="button" id="btnShare">Copy Scenario Link</button>
+        <input id="shareLink" type="text" readonly placeholder="Your scenario link will appear here" aria-label="Scenario link">
+      </div>
+    </section>
+
+    <div class="grid-bottom">
+      <!-- Timeline -->
+      <section class="timeline-panel" aria-labelledby="timelineTitle">
+        <div class="panel-head">
+          <div><h3 id="timelineTitle">Event timeline</h3><p>Real simulation events, newest first. Kept to the last 60.</p></div>
+          <button class="btn btn-ghost btn-sm" id="btnClearLog" type="button">Clear Log</button>
+        </div>
+        <ol id="log" class="log" aria-live="polite"></ol>
+        <p class="empty-log" id="emptyLog">No events yet. Press Launch Simulation, or wait for the first request — it appears here.</p>
+      </section>
+
+      <!-- Education -->
+      <section class="edu-panel" aria-labelledby="eduTitle">
+        <div class="panel-head"><div><h3 id="eduTitle">What just happened?</h3><p id="eduKicker">Select a component or trigger a failure to learn from it.</p></div></div>
+        <article id="eduBody">
+          <h4 id="eduHeading">Normal operation</h4>
+          <p id="eduWhat"><strong>What happened:</strong> Requests flow browser &rarr; DNS &rarr; server &rarr; database or cache, then a response returns.</p>
+          <p id="eduWhy"><strong>Why:</strong> Each step depends on the previous one. DNS answers “where is this site?”, the server runs the application, and the database or cache supplies the data.</p>
+          <p id="eduObserved"><strong>What you observed:</strong> Cyan packets out, lime packets back, and the success rate holding near 100%.</p>
+          <p id="eduRecovery"><strong>How it recovers:</strong> Nothing to recover — this is the baseline every other scenario is compared against.</p>
+          <p id="eduLimits"><strong>What this does not model:</strong> Real networks, TLS, CDNs, load balancers, or a real database. Latency here is simulated, in milliseconds, from queue depth — not measured from a live server.</p>
+        </article>
+        <dl class="glossary">
+          <div><dt title="Domain Name System: translates a domain name into an IP address.">DNS</dt><dd>Translates a name into an address.</dd></div>
+          <div><dt title="Failover: switching traffic from a failed component to a healthy replacement.">Failover</dt><dd>Switching to the backup when the primary fails.</dd></div>
+          <div><dt title="Cache hit: a request served from stored data without a fresh database query.">Cache hit</dt><dd>Served from stored data, no fresh query.</dd></div>
+          <div><dt title="Latency: the simulated time from request creation to response or failure.">Latency</dt><dd>Simulated request-to-response time.</dd></div>
+        </dl>
+      </section>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <p><strong>BREAK THE INTERNET</strong> — an educational lab. All traffic, failures, and numbers are simulated locally in your browser.</p>
+  <p>Open <code>index.html</code> directly. No build step, no libraries, no network calls, no data leaves this page.</p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="script.js"></script>
+</body>
+</html>
